@@ -3,12 +3,20 @@
 start_backend() {
     echo "Starting Flask backend..."
     cd backend || exit
-    source venv/bin/activate
+    
+    if [ ! -d "venv" ]; then
+        echo "Virtual environment missing. Initializing and installing dependencies..."
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+    else
+        source venv/bin/activate
+    fi
+    
     python app.py &
     BACKEND_PID=$!
     cd ..
 }
-
 start_frontend() {
     echo "Starting React frontend..."
     cd frontend || exit
