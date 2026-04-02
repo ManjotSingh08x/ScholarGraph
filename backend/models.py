@@ -62,6 +62,18 @@ class OpenAlexService:
         }
         data = self._execute_request(params)
         return data.get("results", [])
+    def search_works(self, query: str, page: int = 1, per_page: int = 25):
+        params = {
+            "search": query,
+            "page": page,
+            "per-page": per_page,
+            "sort": "relevance_score:desc"
+        }
+        data = self._execute_request(params)
+        return {
+            "results": data.get("results", []),
+            "meta": data.get("meta", {}) # Contains total count for frontend pagination
+        }
     
 @dataclass
 class PaperDetails:
@@ -219,7 +231,7 @@ class GraphBuilder:
         print(f" Total requests sent: {self.service.count} in {end - start} seconds")
         return graph.to_dict()
 
-
-builder = GraphBuilder()
-graph_json = builder.build_graph(seed_id="W3138516171", xr=10, xc=10, yr=4, yc=4, x_lim=10)
-print(graph_json)
+if __name__ == "__main__":
+    builder = GraphBuilder()
+    graph_json = builder.build_graph(seed_id="W3138516171", xr=10, xc=10, yr=4, yc=4, x_lim=10)
+    print(graph_json)
