@@ -12,7 +12,6 @@ def run_example(seed_id, xr, xc, yr, yc, x_lim):
     print(f"\n(Level 0) Fetching seed: {seed_id}")
     seed_data = service.get_work(seed_id)
     print(f"SEED: {seed_data.get('title')}")
-    
     parents = []
     print(f"\n [L1] fetching {xr} references of seed...")
     seed_ref_urls = seed_data.get("referenced_works", [])

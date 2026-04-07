@@ -3,7 +3,8 @@ from flask_cors import CORS
 from models import GraphBuilder, OpenAlexService
 
 app = Flask(__name__)
-CORS(app)
+# In app.py
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 service = OpenAlexService()
 
@@ -23,7 +24,7 @@ def search_papers():
             "error": str(e)
         }), 500
     
-@app.route('/api/papers/<paper_id>', method=['GET'])
+@app.route('/api/papers/<paper_id>', methods=['GET'])
 def get_paper_details(paper_id):
     try:
         data = service.get_work(paper_id)
@@ -47,5 +48,6 @@ def generate_graph(seed_id):
         return jsonify({"error": str(e)}), 500
     
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
-
+    # host='0.0.0.0' allows macOS to route the browser request to the app
+    # port=5001 avoids the common macOS system conflict on port 5000
+    app.run(debug=True, host='0.0.0.0', port=5001)
