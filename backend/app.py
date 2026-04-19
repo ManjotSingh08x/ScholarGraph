@@ -3,7 +3,6 @@ from flask_cors import CORS
 from models import GraphBuilder, OpenAlexService
 
 app = Flask(__name__)
-# In app.py
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 service = OpenAlexService()
@@ -12,12 +11,25 @@ service = OpenAlexService()
 def search_papers():
     query = request.args.get('q', '')
     page = request.args.get('page', 1, type=int)
+    
+    # NEW: Extract filtering arguments from API request
+    start_year = request.args.get('start_year', type=int)
+    end_year = request.args.get('end_year', type=int)
+    venue = request.args.get('venue', type=str)
+    
     if not query:
         return jsonify({
             "error": "Missing search query param 'q'"
         })
     try:
-        data = service.search_works(query, page)
+        # UPDATED: Pass new filter arguments down to the service layer
+        data = service.search_works(
+            query=query, 
+            page=page, 
+            start_year=start_year, 
+            end_year=end_year, 
+            venue=venue
+        )
         return jsonify(data), 200
     except Exception as e:
         return jsonify({
@@ -48,6 +60,4 @@ def generate_graph(seed_id):
         return jsonify({"error": str(e)}), 500
     
 if __name__ == '__main__':
-    # host='0.0.0.0' allows macOS to route the browser request to the app
-    # port=5001 avoids the common macOS system conflict on port 5000
     app.run(debug=True, host='0.0.0.0', port=5001)

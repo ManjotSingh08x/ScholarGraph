@@ -5,6 +5,8 @@ export interface PaperDetails {
   fwci?: number;
   authors: string[];
   doi?: string;
+  venue?: string;
+  concepts?: string[];        // B: top OpenAlex concept labels for faceted UI
 }
 
 export interface PaperNode {
@@ -12,7 +14,7 @@ export interface PaperNode {
   title: string;
   group: number;
   details: PaperDetails;
-  // D3 dynamic properties
+  // D3 simulation mutable properties
   x?: number;
   y?: number;
   fx?: number | null;
@@ -28,4 +30,13 @@ export interface GraphLink {
 export interface CitationGraphData {
   nodes: PaperNode[];
   links: GraphLink[];
+}
+
+// A: shape returned by /api/concepts autocomplete
+export interface ConceptSuggestion {
+  id: string;
+  display_name: string;
+  level: number;
+  works_count: number;
+  description: string;
 }
