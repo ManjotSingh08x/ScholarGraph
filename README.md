@@ -110,8 +110,8 @@ npm run dev
 
 --
 TEAM 14 
-Adityavardhan Singh
-Mayank Rana
-Manjot Singh
-Abhinav Shresth
-Anjan Singla
+Adityavardhan Singh,
+Mayank Rana,
+Manjot Singh,
+Abhinav Shresth,
+Anjan Singla.
