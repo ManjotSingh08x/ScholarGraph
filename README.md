@@ -1,6 +1,6 @@
 # ScholarGraph
 
-ScholarGraph maps academic papers and their citations as an interactive knowledge graph. We thought of it since it was tough to visualize the citation network of papers and understand how they are connected. Moreover tools that exist for graph visualization are often behind a paywall or free tier usage limit.
+- ScholarGraph maps academic papers and their citations as an interactive knowledge graph. We thought of it since it was tough to visualize the citation network of papers and understand how they are connected. Moreover tools that exist for graph visualization are often behind a paywall or free tier usage limit.
 ---
 
 ## Features
