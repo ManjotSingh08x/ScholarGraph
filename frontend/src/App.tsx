@@ -652,8 +652,6 @@ import {
 import CitationGraph from './components/CitationGraph';
 import { PaperNode, CitationGraphData, ConceptSuggestion } from './types/types';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-
 const decodeAbstract = (idx: any): string => {
   if (!idx) return 'No abstract available.';
   const words: string[] = [];
@@ -1021,8 +1019,6 @@ const App: React.FC = () => {
   return (
     <div className={darkMode ? 'dark' : ''}>
       <div className="flex flex-col h-screen w-screen transition-colors duration-500 bg-white text-slate-900 dark:bg-black dark:text-white font-sans overflow-hidden">
-
-        {/* ════ HEADER ════ */}
         <header className="flex items-start px-6 py-4 bg-white border-b border-slate-100 dark:bg-black dark:border-neon/20 z-50 gap-3 flex-wrap relative">
           <button
             onClick={() => setView('home')}

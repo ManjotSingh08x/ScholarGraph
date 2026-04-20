@@ -1,10 +1,13 @@
 import os
+import json
 import requests
 from dotenv import load_dotenv
 from time import time
 import concurrent.futures
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional, Any, Set
+
+from redis_client import redis_client
 
 load_dotenv()
 
@@ -13,9 +16,9 @@ class OpenAlexService:
     def __init__(self):
         print("setting up service")
         self.base_url = "https://api.openalex.org/works"
-        self.session  = requests.Session()
-        self.api_key  = os.getenv("OPENALEX_KEY")
-        self.mail_id  = os.getenv("MAIL_ID")
+        self.session = requests.Session()
+        self.api_key = os.getenv("OPENALEX_KEY")
+        self.mail_id = os.getenv("MAIL_ID")
         if self.api_key:
             self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
         if self.mail_id:
@@ -28,43 +31,135 @@ class OpenAlexService:
         response.raise_for_status()
         return response.json()
 
+    def _paper_cache_key(self, work_id: str) -> str:
+        return f"paper:{work_id}"
+
+    def _citations_cache_key(
+        self,
+        target_id: str,
+        max_results: int,
+        additional_filters: str = ""
+    ) -> str:
+        return f"citations:{target_id}:{max_results}:{additional_filters}"
+
+    def _search_cache_key(
+        self,
+        query: str,
+        page: int,
+        per_page: int,
+        start_year: Optional[int],
+        end_year: Optional[int],
+        venue: Optional[str],
+        concept_ids: Optional[List[str]],
+    ) -> str:
+        concepts_part = ",".join(concept_ids) if concept_ids else ""
+        return f"search:{query}:{page}:{per_page}:{start_year}:{end_year}:{venue}:{concepts_part}"
+
     def get_work(self, work_id: str) -> dict:
+        cache_key = self._paper_cache_key(work_id)
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
         self.count += 1
-        url      = f"{self.base_url}/{work_id}"
+        url = f"{self.base_url}/{work_id}"
         response = self.session.get(url)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+
+        redis_client.set(cache_key, json.dumps(data), ex=3600)
+        return data
 
     def get_batched_works(self, id_list: List[str]) -> List[dict]:
-        results    = []
+        if not id_list:
+            return []
+
+        ordered_results: List[dict] = []
+        missing_ids: List[str] = []
+
+        for work_id in id_list:
+            cache_key = self._paper_cache_key(work_id)
+            cached = redis_client.get(cache_key)
+            if cached:
+                ordered_results.append(json.loads(cached))
+            else:
+                missing_ids.append(work_id)
+
         chunk_size = 50
-        for i in range(0, len(id_list), chunk_size):
-            chunk      = id_list[i : i + chunk_size]
+        fetched_map: Dict[str, dict] = {}
+
+        for i in range(0, len(missing_ids), chunk_size):
+            chunk = missing_ids[i:i + chunk_size]
             joined_ids = "|".join(chunk)
-            params     = {"filter": f"openalex:{joined_ids}", "per-page": chunk_size}
-            data       = self._execute_request(params)
-            results.extend(data.get("results", []))
-        return results
+            params = {"filter": f"openalex:{joined_ids}", "per-page": chunk_size}
+            data = self._execute_request(params)
+
+            for paper in data.get("results", []):
+                paper_id = paper.get("id", "").split("/")[-1]
+                if paper_id:
+                    fetched_map[paper_id] = paper
+                    redis_client.set(self._paper_cache_key(paper_id), json.dumps(paper), ex=3600)
+
+        for work_id in id_list:
+            cache_key = self._paper_cache_key(work_id)
+            cached = redis_client.get(cache_key)
+            if cached:
+                ordered_results.append(json.loads(cached))
+            else:
+                paper = fetched_map.get(work_id)
+                if paper:
+                    ordered_results.append(paper)
+
+        unique_results: List[dict] = []
+        seen: Set[str] = set()
+        for paper in ordered_results:
+            pid = paper.get("id", "").split("/")[-1]
+            if pid and pid not in seen:
+                seen.add(pid)
+                unique_results.append(paper)
+
+        return unique_results
 
     def get_citations(self, target_id: str, max_results: int = 50, additional_filters: str = "") -> List[dict]:
+        cache_key = self._citations_cache_key(target_id, max_results, additional_filters)
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
         base_filter = f"cites:{target_id}"
         if additional_filters:
             base_filter = f"{base_filter},{additional_filters}"
         params = {"filter": base_filter, "per-page": max_results, "sort": "fwci:desc"}
-        data   = self._execute_request(params)
-        return data.get("results", [])
+        data = self._execute_request(params)
+        results = data.get("results", [])
 
-    # ── A: concept_ids support ────────────────────────────────────────────────
+        redis_client.set(cache_key, json.dumps(results), ex=1800)
+        return results
+
     def search_works(
         self,
         query: str,
         page: int = 1,
         per_page: int = 25,
         start_year: Optional[int] = None,
-        end_year:   Optional[int] = None,
-        venue:      Optional[str] = None,
+        end_year: Optional[int] = None,
+        venue: Optional[str] = None,
         concept_ids: Optional[List[str]] = None,
     ) -> dict:
+        cache_key = self._search_cache_key(
+            query=query,
+            page=page,
+            per_page=per_page,
+            start_year=start_year,
+            end_year=end_year,
+            venue=venue,
+            concept_ids=concept_ids,
+        )
+
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
         filters: List[str] = []
 
         if start_year:
@@ -73,50 +168,49 @@ class OpenAlexService:
             filters.append(f"to_publication_date:{end_year}-12-31")
         if venue:
             filters.append(f"primary_location.source.display_name.search:{venue}")
-        # A: map each selected concept to its OpenAlex concept filter
+
         if concept_ids:
             for cid in concept_ids:
-                # OpenAlex concept id format: C41008148  → concepts.id:C41008148
-                clean = cid if cid.startswith('C') else f'C{cid}'
+                clean = cid if cid.startswith("C") else f"C{cid}"
                 filters.append(f"concepts.id:{clean}")
 
         filter_str = ",".join(filters) if filters else None
 
         params: Dict[str, Any] = {
-            "search":   query,
-            "page":     page,
+            "search": query,
+            "page": page,
             "per-page": per_page,
-            "sort":     "relevance_score:desc",
+            "sort": "relevance_score:desc",
         }
         if filter_str:
             params["filter"] = filter_str
 
         data = self._execute_request(params)
-        return {"results": data.get("results", []), "meta": data.get("meta", {})}
+        result = {"results": data.get("results", []), "meta": data.get("meta", {})}
 
+        redis_client.set(cache_key, json.dumps(result), ex=600)
+        return result
 
-# ── Dataclasses ────────────────────────────────────────────────────────────────
 
 @dataclass
 class PaperDetails:
     """Heavy metadata rendered on frontend side-panel."""
-    abstract:         Optional[str]  = None
-    publication_year: Optional[int]  = None
-    citation_count:   Optional[int]  = 0
-    fwci:             Optional[float]= None
-    authors:          List[str]      = field(default_factory=list)
-    venue:            Optional[str]  = None
-    # B/D: concept labels carried through to the frontend for faceted filtering
-    concepts:         List[str]      = field(default_factory=list)
+    abstract: Optional[str] = None
+    publication_year: Optional[int] = None
+    citation_count: Optional[int] = 0
+    fwci: Optional[float] = None
+    authors: List[str] = field(default_factory=list)
+    venue: Optional[str] = None
+    concepts: List[str] = field(default_factory=list)
 
 
 @dataclass
 class PaperNode:
     """Represents a single vertex for the D3 graph."""
-    id:     str
-    title:  str
-    group:  int
-    radius: int          = 15
+    id: str
+    title: str
+    group: int
+    radius: int = 15
     details: PaperDetails = field(default_factory=PaperDetails)
 
 
@@ -125,7 +219,7 @@ class GraphLink:
     """Represents a directional edge between two papers."""
     source: str
     target: str
-    type:   str
+    type: str
 
 
 @dataclass
@@ -138,13 +232,11 @@ class CitationGraph:
         return asdict(self)
 
 
-# ── GraphBuilder ───────────────────────────────────────────────────────────────
-
 class GraphBuilder:
     def __init__(self):
-        self.service   = OpenAlexService()
+        self.service = OpenAlexService()
         self.nodes_map: Dict[str, PaperNode] = {}
-        self.links:     List[GraphLink]       = []
+        self.links: List[GraphLink] = []
 
     def sort_by_fwci(self, papers: List[dict]) -> List[dict]:
         return sorted(
@@ -161,22 +253,19 @@ class GraphBuilder:
         if not work_id or work_id in self.nodes_map:
             return work_id
 
-        # Authors
         authors = [
             a.get("author", {}).get("display_name", "")
             for a in work.get("authorships", [])
         ]
 
-        # Venue
         venue_name = "Unknown Venue"
         try:
-            loc        = work.get("primary_location") or {}
-            source     = loc.get("source") or {}
+            loc = work.get("primary_location") or {}
+            source = loc.get("source") or {}
             venue_name = source.get("display_name") or "Unknown Venue"
         except AttributeError:
             pass
 
-        # B: extract concept display names (up to 5 top concepts by score)
         raw_concepts = work.get("concepts", []) or []
         concepts = [
             c.get("display_name", "")
@@ -210,16 +299,16 @@ class GraphBuilder:
         self._add_node(seed_data, group=0)
 
         seed_ref_urls = seed_data.get("referenced_works", [])
-        seed_ref_ids  = [self._extract_id(url) for url in seed_ref_urls][:xr]
+        seed_ref_ids = [self._extract_id(url) for url in seed_ref_urls][:xr]
 
-        level1_refs  = []
+        level1_refs = []
         level1_cites = []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            future_refs  = executor.submit(self.service.get_batched_works, seed_ref_ids) if seed_ref_ids else None
+            future_refs = executor.submit(self.service.get_batched_works, seed_ref_ids) if seed_ref_ids else None
             future_cites = executor.submit(self.service.get_citations, seed_id, xc)
             if future_refs:
-                level1_refs  = future_refs.result()
+                level1_refs = future_refs.result()
             level1_cites = future_cites.result()
 
         for ref in level1_refs:
@@ -230,20 +319,20 @@ class GraphBuilder:
             c_id = self._add_node(cite, group=1)
             self._add_link(source=c_id, target=seed_id, link_type="cited_by")
 
-        all_parents     = self.sort_by_fwci(level1_refs + level1_cites)
+        all_parents = self.sort_by_fwci(level1_refs + level1_cites)
         expanded_parents = all_parents[:x_lim]
 
         parent_ref_map: Dict[str, List[str]] = {}
-        all_l2_ref_ids: Set[str]             = set()
+        all_l2_ref_ids: Set[str] = set()
 
         for parent in expanded_parents:
-            p_id     = self._extract_id(parent.get("id"))
-            ref_ids  = [self._extract_id(url) for url in parent.get("referenced_works", [])][:yr]
+            p_id = self._extract_id(parent.get("id"))
+            ref_ids = [self._extract_id(url) for url in parent.get("referenced_works", [])][:yr]
             parent_ref_map[p_id] = ref_ids
             all_l2_ref_ids.update(ref_ids)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            future_l2_refs      = executor.submit(self.service.get_batched_works, list(all_l2_ref_ids)) if all_l2_ref_ids else None
+            future_l2_refs = executor.submit(self.service.get_batched_works, list(all_l2_ref_ids)) if all_l2_ref_ids else None
             future_to_parent_id = {
                 executor.submit(self.service.get_citations, self._extract_id(p.get("id")), yc): self._extract_id(p.get("id"))
                 for p in expanded_parents
@@ -260,19 +349,19 @@ class GraphBuilder:
                         self._add_link(source=p_id, target=r_node_id, link_type="references")
 
             for future in concurrent.futures.as_completed(future_to_parent_id):
-                p_id      = future_to_parent_id[future]
+                p_id = future_to_parent_id[future]
                 cites_data = future.result()
                 for cite in cites_data:
                     c_id = self._add_node(cite, group=2)
                     self._add_link(source=c_id, target=p_id, link_type="cited_by")
 
         graph = CitationGraph(nodes=list(self.nodes_map.values()), links=self.links)
-        end   = time()
+        end = time()
         print(f"Total requests: {self.service.count} in {end - start:.1f}s")
         return graph.to_dict()
 
 
 if __name__ == "__main__":
-    builder    = GraphBuilder()
+    builder = GraphBuilder()
     graph_json = builder.build_graph(seed_id="W3138516171", xr=10, xc=10, yr=4, yc=4, x_lim=10)
     print(graph_json)
