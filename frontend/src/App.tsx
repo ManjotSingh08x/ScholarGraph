@@ -517,11 +517,11 @@ const App: React.FC = () => {
               <div className="max-w-2xl bg-slate-50 dark:bg-zinc-900/40 p-10 rounded-[2.5rem] border border-slate-200 dark:border-neon/20 backdrop-blur-xl shadow-xl">
                 <Quote className="text-scholarBlue dark:text-neon mb-6 mx-auto opacity-40" size={32} />
                 <p className="text-slate-600 dark:text-white text-xl font-medium italic leading-relaxed mb-6">
-                  "Knowledge shouldn't be trapped in static lists. I built ScholarGraph to turn thousands of citations into a living, breathing map of human progress."
+                  "The greatest value of a picture is when it forces us to notice what we never expected to see."
                 </p>
                 <div className="flex items-center justify-center gap-4">
                   <div className="h-[1px] w-12 bg-slate-200 dark:bg-zinc-800" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-neon/60">The Founder's Vision</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-neon/60">John Tukey</span>
                   <div className="h-[1px] w-12 bg-slate-200 dark:bg-zinc-800" />
                 </div>
               </div>
