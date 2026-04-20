@@ -644,7 +644,7 @@
 
 // export default App;
 
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Home, Search, ChevronRight, BookOpen, Loader2, Quote,
   Sun, Moon, ExternalLink, X, Filter, Clock, Zap, Tag,
@@ -667,13 +667,10 @@ const decodeAbstract = (idx: any): string => {
   }
 };
 
-// B: build concept-facet counts from all nodes in the current graph
 const buildConceptFacets = (nodes: PaperNode[]): { label: string; count: number }[] => {
   const freq: Record<string, number> = {};
   nodes.forEach(n => {
-    (n.details.concepts ?? []).forEach(c => {
-      freq[c] = (freq[c] ?? 0) + 1;
-    });
+    (n.details.concepts ?? []).forEach(c => { freq[c] = (freq[c] ?? 0) + 1; });
   });
   return Object.entries(freq)
     .map(([label, count]) => ({ label, count }))
@@ -681,7 +678,6 @@ const buildConceptFacets = (nodes: PaperNode[]): { label: string; count: number 
     .slice(0, 25);
 };
 
-// D: degree-centrality map  { nodeId → degree }
 const buildDegreeMap = (nodes: PaperNode[], links: CitationGraphData['links']): Record<string, number> => {
   const deg: Record<string, number> = {};
   nodes.forEach(n => (deg[n.id] = 0));
@@ -694,37 +690,197 @@ const buildDegreeMap = (nodes: PaperNode[], links: CitationGraphData['links']): 
   return deg;
 };
 
+// ─── Venue options (grouped, exhaustive) ────────────────────────────────────
+
+const VENUE_OPTIONS: { group: string; venues: string[] }[] = [
+  {
+    group: 'AI / Machine Learning',
+    venues: ['NeurIPS', 'ICML', 'ICLR', 'AAAI', 'IJCAI', 'UAI', 'AISTATS', 'AutoML', 'CoLLAs', 'LoG'],
+  },
+  {
+    group: 'Computer Vision',
+    venues: ['CVPR', 'ICCV', 'ECCV', 'WACV', 'BMVC', 'ACCV', 'MICCAI', 'MIDL'],
+  },
+  {
+    group: 'Natural Language Processing',
+    venues: ['ACL', 'EMNLP', 'NAACL', 'COLING', 'EACL', 'CoNLL', 'SemEval', 'LREC'],
+  },
+  {
+    group: 'Robotics & Systems',
+    venues: ['ICRA', 'IROS', 'CoRL', 'RSS', 'HRI', 'ISRR', 'ICAPS'],
+  },
+  {
+    group: 'Data Mining & Information Retrieval',
+    venues: ['KDD', 'WWW', 'SIGIR', 'WSDM', 'CIKM', 'RecSys', 'WebConf', 'ECIR'],
+  },
+  {
+    group: 'Databases & Systems',
+    venues: ['VLDB', 'SIGMOD', 'ICDE', 'EDBT', 'OSDI', 'SOSP', 'EuroSys', 'USENIX ATC', 'ASPLOS'],
+  },
+  {
+    group: 'Theory & Algorithms',
+    venues: ['STOC', 'FOCS', 'SODA', 'JACM', 'TALG', 'ITCS', 'CCC', 'APPROX'],
+  },
+  {
+    group: 'Security & Privacy',
+    venues: ['IEEE S&P', 'CCS', 'USENIX Security', 'NDSS', 'PETS', 'Euro S&P'],
+  },
+  {
+    group: 'Human-Computer Interaction',
+    venues: ['CHI', 'UIST', 'CSCW', 'IUI', 'DIS', 'ASSETS', 'MobileHCI'],
+  },
+  {
+    group: 'Bioinformatics & Computational Biology',
+    venues: [
+      'Bioinformatics', 'RECOMB', 'ISMB',
+      'PLOS Computational Biology', 'BMC Bioinformatics', 'Nucleic Acids Research',
+    ],
+  },
+  {
+    group: 'Multidisciplinary Science',
+    venues: [
+      'Nature', 'Science', 'Cell', 'PNAS',
+      'Nature Communications', 'Scientific Reports', 'PLOS ONE', 'eLife',
+    ],
+  },
+  {
+    group: 'Journals — AI & ML',
+    venues: [
+      'Journal of Machine Learning Research',
+      'Artificial Intelligence',
+      'IEEE Transactions on Neural Networks and Learning Systems',
+      'IEEE Transactions on Pattern Analysis and Machine Intelligence',
+      'Neural Networks',
+      'Machine Learning',
+      'Pattern Recognition',
+    ],
+  },
+];
+
+// ─── Concept options (grouped, curated with OpenAlex IDs) ───────────────────
+// value format passed through the <select>: "ID|Label"
+
+const CONCEPT_OPTIONS: { group: string; items: { id: string; label: string }[] }[] = [
+  {
+    group: 'Core AI / ML',
+    items: [
+      { id: 'C154945302',  label: 'Machine Learning' },
+      { id: 'C41008148',   label: 'Computer Science' },
+      { id: 'C119857082',  label: 'Deep Learning' },
+      { id: 'C108583219',  label: 'Reinforcement Learning' },
+      { id: 'C50644808',   label: 'Artificial Intelligence' },
+      { id: 'C28490314',   label: 'Transfer Learning' },
+      { id: 'C16301287',   label: 'Federated Learning' },
+      { id: 'C2522767166', label: 'Self-Supervised Learning' },
+      { id: 'C153294291',  label: 'Contrastive Learning' },
+    ],
+  },
+  {
+    group: 'Neural Architectures',
+    items: [
+      { id: 'C124101348',  label: 'Neural Network' },
+      { id: 'C2776035482', label: 'Transformer' },
+      { id: 'C83523745',   label: 'Convolutional Neural Network' },
+      { id: 'C70721614',   label: 'Recurrent Neural Network' },
+      { id: 'C111903765',  label: 'Generative Adversarial Network' },
+      { id: 'C139719470',  label: 'Attention Mechanism' },
+      { id: 'C183720460',  label: 'Graph Neural Network' },
+    ],
+  },
+  {
+    group: 'Computer Vision',
+    items: [
+      { id: 'C31972630',   label: 'Computer Vision' },
+      { id: 'C2987103',    label: 'Object Detection' },
+      { id: 'C130183531',  label: 'Image Segmentation' },
+      { id: 'C109551123',  label: 'Image Classification' },
+      { id: 'C156875173',  label: 'Semantic Segmentation' },
+      { id: 'C2776591716', label: 'Vision Transformer (ViT)' },
+      { id: 'C2781563860', label: 'Diffusion Model' },
+    ],
+  },
+  {
+    group: 'Natural Language Processing',
+    items: [
+      { id: 'C204321447',  label: 'Natural Language Processing' },
+      { id: 'C2776231217', label: 'Large Language Model' },
+      { id: 'C87649667',   label: 'Text Classification' },
+      { id: 'C188147891',  label: 'Named Entity Recognition' },
+      { id: 'C130516862',  label: 'Machine Translation' },
+      { id: 'C2781424028', label: 'Question Answering' },
+      { id: 'C2779809',    label: 'Sentiment Analysis' },
+    ],
+  },
+  {
+    group: 'Data & Optimisation',
+    items: [
+      { id: 'C121332964',  label: 'Bayesian Optimisation' },
+      { id: 'C37744722',   label: 'Hyperparameter Tuning' },
+      { id: 'C2524010',    label: 'Data Augmentation' },
+      { id: 'C47187133',   label: 'Knowledge Distillation' },
+      { id: 'C44134380',   label: 'Gradient Descent' },
+      { id: 'C2779778',    label: 'Regularisation' },
+    ],
+  },
+  {
+    group: 'Graphs & Networks',
+    items: [
+      { id: 'C183720460',  label: 'Graph Neural Network' },
+      { id: 'C9206858',    label: 'Graph Theory' },
+      { id: 'C149782125',  label: 'Social Network Analysis' },
+      { id: 'C41183218',   label: 'Citation Network' },
+      { id: 'C2779831',    label: 'Link Prediction' },
+    ],
+  },
+  {
+    group: 'Multimodal & Generation',
+    items: [
+      { id: 'C2776591716', label: 'Multimodal Learning' },
+      { id: 'C111903765',  label: 'Image Generation' },
+      { id: 'C2781563860', label: 'Text-to-Image' },
+      { id: 'C2776231217', label: 'Vision-Language Model' },
+      { id: 'C2779868',    label: 'Image Captioning' },
+    ],
+  },
+  {
+    group: 'Science Applications',
+    items: [
+      { id: 'C71924100',   label: 'Medicine' },
+      { id: 'C2779415594', label: 'Drug Discovery' },
+      { id: 'C104292427',  label: 'Bioinformatics' },
+      { id: 'C185592680',  label: 'Climate Science' },
+      { id: 'C39432304',   label: 'Astronomy' },
+      { id: 'C2780378530', label: 'Materials Science' },
+    ],
+  },
+];
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(true);
   const [view, setView] = useState<'home' | 'search' | 'graph'>('home');
 
-  // ── A: pre-search filters ──────────────────────────────────────────────────
-  const [searchQuery,        setSearchQuery]        = useState('');
-  const [startYear,          setStartYear]          = useState('');
-  const [endYear,            setEndYear]            = useState('');
-  const [venue,              setVenue]              = useState('');
-  const [selectedConcepts,   setSelectedConcepts]   = useState<ConceptSuggestion[]>([]);
-  const [conceptQuery,       setConceptQuery]       = useState('');
-  const [conceptSuggestions, setConceptSuggestions] = useState<ConceptSuggestion[]>([]);
-  const [conceptLoading,     setConceptLoading]     = useState(false);
-  const conceptDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Pre-search filter state
+  const [searchQuery,      setSearchQuery]      = useState('');
+  const [startYear,        setStartYear]        = useState('');
+  const [endYear,          setEndYear]          = useState('');
+  const [venue,            setVenue]            = useState('');
+  const [selectedConcepts, setSelectedConcepts] = useState<ConceptSuggestion[]>([]);
+  const [isFiltersOpen,    setIsFiltersOpen]    = useState(false);
 
-  // New State for Collapsible Filter Panel
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-
-  // ── data ───────────────────────────────────────────────────────────────────
+  // Data
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [graphData,     setGraphData]     = useState<CitationGraphData | null>(null);
   const [selectedNode,  setSelectedNode]  = useState<PaperNode | null>(null);
   const [loading,       setLoading]       = useState(false);
 
-  // ── B: faceted concept filter (post-search) ────────────────────────────────
-  const [activeFacets, setActiveFacets] = useState<Set<string>>(new Set());
+  // Post-graph filter state
+  const [activeFacets,    setActiveFacets]    = useState<Set<string>>(new Set());
+  const [timelineYear,    setTimelineYear]    = useState<number | null>(null);
+  const [degreeThreshold, setDegreeThreshold] = useState(0);
+  const [highlightedNodes,setHighlightedNodes]= useState<Set<string>>(new Set());
 
-  // ── C: timeline slider ────────────────────────────────────────────────────
-  const [timelineYear, setTimelineYear] = useState<number | null>(null);
   const yearRange = useMemo<[number, number] | null>(() => {
     if (!graphData) return null;
     const years = graphData.nodes
@@ -738,33 +894,19 @@ const App: React.FC = () => {
     if (yearRange) setTimelineYear(yearRange[1]);
   }, [yearRange]);
 
-  // ── D: topology filters ────────────────────────────────────────────────────
-  const [degreeThreshold,  setDegreeThreshold]  = useState(0);
-  const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
-
   const degreeMap = useMemo(
     () => (graphData ? buildDegreeMap(graphData.nodes, graphData.links) : {}),
     [graphData]
   );
-  const maxDegree = useMemo(
-    () => Math.max(0, ...Object.values(degreeMap)),
-    [degreeMap]
-  );
+  const maxDegree = useMemo(() => Math.max(0, ...Object.values(degreeMap)), [degreeMap]);
+  const conceptFacets = useMemo(() => (graphData ? buildConceptFacets(graphData.nodes) : []), [graphData]);
 
-  // ── Derived: concept facets ────────────────────────────────────────────────
-  const conceptFacets = useMemo(
-    () => (graphData ? buildConceptFacets(graphData.nodes) : []),
-    [graphData]
-  );
-
-  // ── Derived: visible node IDs (null = all visible) ────────────────────────
   const visibleNodeIds = useMemo<Set<string> | null>(() => {
     if (!graphData) return null;
     const hasTimeline = timelineYear !== null && yearRange !== null && timelineYear < yearRange[1];
     const hasFacets   = activeFacets.size > 0;
     const hasDegree   = degreeThreshold > 0;
     if (!hasTimeline && !hasFacets && !hasDegree) return null;
-
     const ids = new Set<string>();
     graphData.nodes.forEach(n => {
       if (hasTimeline) {
@@ -772,8 +914,8 @@ const App: React.FC = () => {
         if (y === undefined || y === null || y > timelineYear!) return;
       }
       if (hasFacets) {
-        const nodeConcepts = new Set(n.details.concepts ?? []);
-        if (![...activeFacets].some(f => nodeConcepts.has(f))) return;
+        const nc = new Set(n.details.concepts ?? []);
+        if (![...activeFacets].some(f => nc.has(f))) return;
       }
       if (hasDegree && (degreeMap[n.id] ?? 0) < degreeThreshold) return;
       ids.add(n.id);
@@ -781,22 +923,8 @@ const App: React.FC = () => {
     return ids;
   }, [graphData, timelineYear, yearRange, activeFacets, degreeThreshold, degreeMap]);
 
-  // ── A: concept autocomplete ────────────────────────────────────────────────
-  useEffect(() => {
-    if (conceptDebounce.current) clearTimeout(conceptDebounce.current);
-    if (!conceptQuery.trim()) { setConceptSuggestions([]); return; }
-    conceptDebounce.current = setTimeout(async () => {
-      setConceptLoading(true);
-      try {
-        const res  = await fetch(`http://localhost:5001/api/concepts?q=${encodeURIComponent(conceptQuery)}`);
-        const data = await res.json();
-        setConceptSuggestions(Array.isArray(data) ? data : []);
-      } catch { setConceptSuggestions([]); }
-      finally  { setConceptLoading(false); }
-    }, 300);
-  }, [conceptQuery]);
-
   // ── Actions ────────────────────────────────────────────────────────────────
+
   const performSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setLoading(true); setView('search');
@@ -826,6 +954,19 @@ const App: React.FC = () => {
       setDegreeThreshold(0);
     } finally { setLoading(false); }
   }, []);
+
+  // Add a concept from the dropdown (value = "ID|Label")
+  const addConceptFromDropdown = (raw: string) => {
+    if (!raw) return;
+    const sep   = raw.indexOf('|');
+    const id    = raw.slice(0, sep);
+    const label = raw.slice(sep + 1);
+    if (!id || selectedConcepts.find(c => c.id === id)) return;
+    setSelectedConcepts(prev => [
+      ...prev,
+      { id, display_name: label, level: 0, works_count: 0, description: '' },
+    ]);
+  };
 
   const toggleFacet = (label: string) =>
     setActiveFacets(prev => {
@@ -870,6 +1011,12 @@ const App: React.FC = () => {
 
   const anyPostFilter = visibleNodeIds !== null || degreeThreshold > 0 || highlightedNodes.size > 0;
 
+  // Shared select class
+  const sel =
+    'px-4 py-2.5 bg-white border border-slate-200 focus:border-scholarBlue rounded-2xl ' +
+    'outline-none text-xs font-semibold cursor-pointer appearance-none ' +
+    'dark:bg-zinc-900 dark:border-zinc-800 dark:text-white dark:focus:border-neon transition-colors';
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className={darkMode ? 'dark' : ''}>
@@ -885,7 +1032,8 @@ const App: React.FC = () => {
           </button>
 
           <div className="flex flex-1 flex-col min-w-0">
-            {/* A. Minimal Default View (Top Bar) */}
+
+            {/* ── Top bar ── */}
             <div className="flex gap-2 flex-wrap items-center w-full">
               <div className="relative flex-1 min-w-[180px]">
                 <Search className="absolute left-4 top-3.5 text-slate-400 dark:text-neon/40 pointer-events-none" size={17} />
@@ -899,7 +1047,7 @@ const App: React.FC = () => {
               </div>
 
               <button
-                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                onClick={() => setIsFiltersOpen(o => !o)}
                 className={`px-5 py-3 rounded-3xl font-black text-[11px] uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
                   isFiltersOpen
                     ? 'bg-slate-200 border-slate-300 text-slate-800 dark:bg-zinc-800 dark:border-neon/40 dark:text-neon'
@@ -909,99 +1057,91 @@ const App: React.FC = () => {
                 ⚙️ Filters
               </button>
 
-              <button onClick={performSearch}
+              <button
+                onClick={performSearch}
                 className="px-6 py-3 bg-scholarBlue dark:bg-neon text-white dark:text-black rounded-3xl font-black text-[11px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-md"
               >
                 Search
               </button>
 
-              <button onClick={() => setDarkMode(!darkMode)}
+              <button
+                onClick={() => setDarkMode(d => !d)}
                 className="flex items-center gap-2 px-5 py-3 rounded-3xl bg-slate-100 text-slate-800 dark:bg-zinc-800 dark:text-neon font-black text-[10px] uppercase tracking-widest border border-transparent dark:border-neon/30 transition-all active:scale-95 shadow-sm shrink-0"
               >
                 {darkMode ? <><Sun size={15} /> Light</> : <><Moon size={15} /> Neon</>}
               </button>
             </div>
 
-            {/* B & C. Toggle Panel Behavior & Content */}
-            <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isFiltersOpen ? "grid-rows-[1fr] mt-3" : "grid-rows-[0fr] mt-0"}`}>
+            {/* ── Collapsible filter panel ── */}
+            <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isFiltersOpen ? 'grid-rows-[1fr] mt-3' : 'grid-rows-[0fr] mt-0'}`}>
               <div className="overflow-hidden">
                 <div className="flex flex-wrap gap-3 p-4 bg-slate-50 border border-slate-200 rounded-3xl dark:bg-zinc-900/40 dark:border-neon/10 items-center">
-                  
-                  <select 
-                    value={startYear} 
-                    onChange={e => setStartYear(e.target.value)}
-                    className="w-36 px-4 py-2.5 bg-white border border-slate-200 focus:border-scholarBlue rounded-2xl outline-none text-xs font-semibold dark:bg-zinc-900 dark:border-zinc-800 dark:text-white dark:focus:border-neon"
-                  >
+
+                  {/* ── Start Year ── */}
+                  <select value={startYear} onChange={e => setStartYear(e.target.value)} className={`w-36 ${sel}`}>
                     <option value="">📅 Start Year</option>
                     {Array.from({ length: 50 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                      <option key={`start-${y}`} value={y}>{y}</option>
+                      <option key={`s${y}`} value={y}>{y}</option>
                     ))}
                   </select>
 
-                  <select 
-                    value={endYear} 
-                    onChange={e => setEndYear(e.target.value)}
-                    className="w-36 px-4 py-2.5 bg-white border border-slate-200 focus:border-scholarBlue rounded-2xl outline-none text-xs font-semibold dark:bg-zinc-900 dark:border-zinc-800 dark:text-white dark:focus:border-neon"
-                  >
+                  {/* ── End Year ── */}
+                  <select value={endYear} onChange={e => setEndYear(e.target.value)} className={`w-36 ${sel}`}>
                     <option value="">📅 End Year</option>
                     {Array.from({ length: 50 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                      <option key={`end-${y}`} value={y}>{y}</option>
+                      <option key={`e${y}`} value={y}>{y}</option>
                     ))}
                   </select>
 
-                  {/* Note: I converted Venue to a dropdown as requested, with a few common defaults. 
-                      You can change this back to an <input type="text"> if you prefer free-form entry. */}
-                  <select 
-                    value={venue} 
-                    onChange={e => setVenue(e.target.value)}
-                    className="w-44 px-4 py-2.5 bg-white border border-slate-200 focus:border-scholarBlue rounded-2xl outline-none text-xs font-semibold dark:bg-zinc-900 dark:border-zinc-800 dark:text-white dark:focus:border-neon"
-                  >
-                    <option value="">🏛️ Venue</option>
-                    <option value="ICLR">ICLR</option>
-                    <option value="NeurIPS">NeurIPS</option>
-                    <option value="ICML">ICML</option>
-                    <option value="CVPR">CVPR</option>
-                    <option value="Nature">Nature</option>
-                    <option value="Science">Science</option>
+                  {/* ── Venue — grouped, exhaustive ── */}
+                  <select value={venue} onChange={e => setVenue(e.target.value)} className={`w-60 ${sel}`}>
+                    <option value="">🏛️ Venue / Journal</option>
+                    {VENUE_OPTIONS.map(g => (
+                      <optgroup key={g.group} label={g.group}>
+                        {g.venues.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
 
-                  <div className="w-[1px] h-8 bg-slate-200 dark:bg-zinc-800 mx-2" />
+                  <div className="w-px h-8 bg-slate-200 dark:bg-zinc-700 shrink-0" />
 
-                  {/* Concept Search inside the Panel */}
-                  <div className="relative flex-1 min-w-[200px]">
-                    <input type="text" placeholder="+ Add concept filter…"
-                      value={conceptQuery}
-                      onChange={e => setConceptQuery(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-white border border-slate-200 focus:border-scholarBlue rounded-2xl outline-none text-xs font-semibold dark:bg-zinc-900 dark:border-zinc-800 dark:text-white dark:focus:border-neon"
-                    />
-                    {(conceptSuggestions.length > 0 || conceptLoading) && (
-                      <div className="absolute top-full mt-2 left-0 w-80 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-neon/20 rounded-2xl shadow-2xl z-50 overflow-hidden">
-                        {conceptLoading
-                          ? <div className="p-3 text-xs text-slate-400">Searching…</div>
-                          : conceptSuggestions.map(c => (
-                              <button key={c.id}
-                                onClick={() => {
-                                  if (!selectedConcepts.find(s => s.id === c.id))
-                                    setSelectedConcepts(prev => [...prev, c]);
-                                  setConceptQuery(''); setConceptSuggestions([]);
-                                }}
-                                className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors border-b border-slate-50 dark:border-zinc-800 last:border-0"
-                              >
-                                <div className="text-xs font-bold text-slate-800 dark:text-white">{c.display_name}</div>
-                                <div className="text-[10px] text-slate-400 dark:text-zinc-500">
-                                  Level {c.level} · {c.works_count.toLocaleString()} works
-                                </div>
-                              </button>
-                            ))
-                        }
-                      </div>
-                    )}
-                  </div>
+                  {/* ── Concept dropdown — grouped, curated ── */}
+                  {/*
+                    value is always reset to "" after a selection so the placeholder
+                    always shows. The real selection state lives in selectedConcepts.
+                    Already-selected concepts are marked ✓ and disabled.
+                  */}
+                  <select
+                    value=""
+                    onChange={e => { addConceptFromDropdown(e.target.value); e.target.value = ''; }}
+                    className={`flex-1 min-w-[220px] ${sel}`}
+                  >
+                    <option value="">🧠 Add Concept Filter…</option>
+                    {CONCEPT_OPTIONS.map(g => (
+                      <optgroup key={g.group} label={g.group}>
+                        {g.items.map(item => {
+                          const already = !!selectedConcepts.find(c => c.id === item.id);
+                          return (
+                            <option
+                              key={item.id}
+                              value={`${item.id}|${item.label}`}
+                              disabled={already}
+                            >
+                              {already ? `✓ ${item.label}` : item.label}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    ))}
+                  </select>
+
                 </div>
               </div>
             </div>
 
-            {/* D. Active Filter Feedback (Pills) */}
+            {/* ── Active filter pills ── */}
             {(startYear || endYear || venue || selectedConcepts.length > 0) && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {startYear && (
@@ -1032,6 +1172,7 @@ const App: React.FC = () => {
                 ))}
               </div>
             )}
+
           </div>
         </header>
 
@@ -1063,10 +1204,7 @@ const App: React.FC = () => {
           {/* ════ SEARCH RESULTS ════ */}
           {view === 'search' && (
             <div className="flex-1 overflow-y-auto p-16 max-w-5xl mx-auto w-full animate-in slide-in-from-bottom-8">
-              <div className="flex items-end gap-4 mb-10 flex-wrap">
-                <h2 className="text-4xl font-black dark:text-neon">Results</h2>
-              </div>
-
+              <h2 className="text-4xl font-black mb-10 dark:text-neon">Results</h2>
               {loading
                 ? <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-scholarBlue dark:text-neon" size={48} /></div>
                 : searchResults.length === 0
@@ -1098,11 +1236,10 @@ const App: React.FC = () => {
           {view === 'graph' && (
             <div className="flex flex-1 overflow-hidden animate-in fade-in duration-500">
 
-              {/* ── LEFT SIDEBAR ── */}
+              {/* LEFT SIDEBAR */}
               <aside className="w-72 bg-white border-r border-slate-100 dark:bg-black dark:border-neon/10 flex flex-col overflow-hidden">
                 <div className="flex-1 overflow-y-auto p-5 space-y-7">
 
-                  {/* ── B: Concept Facets ── */}
                   {conceptFacets.length > 0 && (
                     <section>
                       <div className="flex items-center justify-between mb-3">
@@ -1110,8 +1247,7 @@ const App: React.FC = () => {
                           <Tag size={10} /> Concepts
                         </h4>
                         {activeFacets.size > 0 && (
-                          <button onClick={() => setActiveFacets(new Set())}
-                            className="text-[9px] font-black uppercase text-red-400 hover:text-red-500 transition-colors">
+                          <button onClick={() => setActiveFacets(new Set())} className="text-[9px] font-black uppercase text-red-400 hover:text-red-500 transition-colors">
                             Clear
                           </button>
                         )}
@@ -1135,14 +1271,12 @@ const App: React.FC = () => {
                     </section>
                   )}
 
-                  {/* ── D: Degree Centrality ── */}
                   {graphData && maxDegree > 0 && (
                     <section>
                       <h4 className="text-[10px] font-black uppercase text-slate-400 dark:text-neon/30 tracking-widest flex items-center gap-1.5 mb-3">
                         <Zap size={10} /> Impact Threshold
                       </h4>
-                      <input type="range" min={0} max={maxDegree}
-                        value={degreeThreshold}
+                      <input type="range" min={0} max={maxDegree} value={degreeThreshold}
                         onChange={e => setDegreeThreshold(Number(e.target.value))}
                         className="w-full accent-scholarBlue dark:accent-neon"
                       />
@@ -1154,7 +1288,6 @@ const App: React.FC = () => {
                     </section>
                   )}
 
-                  {/* Relations */}
                   <section>
                     <h4 className="text-[10px] font-black uppercase mb-3 text-slate-400 dark:text-neon/30 tracking-widest">References</h4>
                     <div className="space-y-2">
@@ -1179,7 +1312,6 @@ const App: React.FC = () => {
                   </section>
                 </div>
 
-                {/* ── C: Timeline slider (pinned to bottom) ── */}
                 {yearRange && (
                   <div className="border-t border-slate-100 dark:border-neon/10 p-5 shrink-0 bg-white dark:bg-black">
                     <h4 className="text-[10px] font-black uppercase text-slate-400 dark:text-neon/30 tracking-widest flex items-center gap-1.5 mb-3">
@@ -1205,9 +1337,8 @@ const App: React.FC = () => {
                 )}
               </aside>
 
-              {/* ── GRAPH CANVAS ── */}
+              {/* GRAPH CANVAS */}
               <section className="flex-1 relative bg-slate-50 dark:bg-black overflow-hidden shadow-inner">
-                {/* Active-filter pill */}
                 {anyPostFilter && (
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-slate-200 dark:border-neon/20 rounded-full shadow-lg text-[10px] font-black uppercase tracking-widest select-none">
                     <Filter size={11} className="text-scholarBlue dark:text-neon" />
@@ -1247,7 +1378,7 @@ const App: React.FC = () => {
                 </div>
               </section>
 
-              {/* ── RIGHT SIDEBAR ── */}
+              {/* RIGHT SIDEBAR */}
               <aside className="w-[28rem] bg-white border-l border-slate-100 dark:bg-black dark:border-neon/10 p-10 overflow-y-auto shadow-2xl z-20">
                 {selectedNode ? (
                   <div className="space-y-7 animate-in slide-in-from-right">
@@ -1282,7 +1413,6 @@ const App: React.FC = () => {
                       ))}
                     </div>
 
-                    {/* B: concept tags — clicking one adds to facet filter */}
                     {(selectedNode.details.concepts ?? []).length > 0 && (
                       <div>
                         <h4 className="text-[9px] font-black uppercase text-slate-400 dark:text-zinc-500 mb-2 tracking-widest">Concepts</h4>
@@ -1308,7 +1438,6 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-neon/10">
-                      {/* D: highlight toggle button */}
                       <button
                         onClick={() => toggleHighlight(selectedNode.id)}
                         className={`px-4 py-4 rounded-3xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${
