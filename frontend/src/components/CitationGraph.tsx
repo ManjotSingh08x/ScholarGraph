@@ -25,17 +25,11 @@ const CitationGraph: React.FC<Props> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // 1. Store callbacks in a ref. 
-  // This prevents the physics simulation from restarting if the parent passes a new function reference.
   const callbacks = useRef({ onNodeClick, onNodeCtrlClick });
   useEffect(() => {
     callbacks.current = { onNodeClick, onNodeCtrlClick };
   }, [onNodeClick, onNodeCtrlClick]);
 
-  // ==========================================
-  // EFFECT 1: BUILD THE GRAPH (Physics & Zoom)
-  // Runs ONLY when `data` or `degreeMap` changes
-  // ==========================================
   useEffect(() => {
     if (!svgRef.current || !data.nodes.length) return;
 
@@ -58,7 +52,7 @@ const CitationGraph: React.FC<Props> = ({
 
     const glow = defs.append('filter').attr('id', 'glow')
       .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
-    // We add a class to feGaussianBlur to dynamically update its deviation later based on isDark
+
     glow.append('feGaussianBlur').attr('class', 'glow-blur').attr('stdDeviation', '4').attr('result', 'blur');
     glow.append('feComposite').attr('in', 'SourceGraphic').attr('in2', 'blur').attr('operator', 'over');
 
@@ -78,7 +72,7 @@ const CitationGraph: React.FC<Props> = ({
       .selectAll<SVGLineElement, GraphLink>('line')
       .data(data.links)
       .join('line')
-      .attr('class', 'graph-link'); // Added class for easy selection later
+      .attr('class', 'graph-link'); 
 
     const drag = d3.drag<SVGGElement, PaperNode>()
       .on('start', (event, d) => {
@@ -114,12 +108,12 @@ const CitationGraph: React.FC<Props> = ({
     };
 
     nodeGroup.append('circle')
-      .attr('class', 'node-circle') // Added class
+      .attr('class', 'node-circle') 
       .attr('r', baseRadius)
       .style('transition', 'opacity 0.3s ease-in-out, r 0.3s ease-in-out');
 
     nodeGroup.append('text')
-      .attr('class', 'node-label') // Added class
+      .attr('class', 'node-label')
       .text(d => d.title.length > 25 ? d.title.substring(0, 22) + '…' : d.title)
       .attr('dy', d => baseRadius(d) + 18)
       .attr('text-anchor', 'middle')
@@ -139,12 +133,9 @@ const CitationGraph: React.FC<Props> = ({
     });
 
     return () => { simulation.stop(); };
-  }, [data, degreeMap]); // Removed visual state dependencies!
+  }, [data, degreeMap]); 
 
-  // ==========================================
-  // EFFECT 2: UPDATE STYLES (Colors & Highlights)
-  // Runs ONLY when visual state changes
-  // ==========================================
+
   useEffect(() => {
     if (!svgRef.current) return;
     const svg = d3.select(svgRef.current);
@@ -158,10 +149,8 @@ const CitationGraph: React.FC<Props> = ({
       highlightedNodeIds.has(nodeId(l.source)) &&
       highlightedNodeIds.has(nodeId(l.target));
 
-    // Update glow dynamic parameter
     svg.select('.glow-blur').attr('stdDeviation', isDark ? '5' : '3');
 
-    // Update Links
     svg.selectAll<SVGLineElement, GraphLink>('.graph-link')
       .attr('stroke', l =>
         isEdgeLit(l) ? (isDark ? '#fff' : '#f59e0b') : (isDark ? '#39FF14' : '#2563eb')
@@ -169,7 +158,6 @@ const CitationGraph: React.FC<Props> = ({
       .attr('stroke-opacity', l => (isEdgeLit(l) ? 0.95 : isDark ? 0.15 : 0.25))
       .attr('stroke-width', l => (isEdgeLit(l) ? 3 : 1.5));
 
-    // Update Node Circles
     svg.selectAll<SVGCircleElement, PaperNode>('.node-circle')
       .attr('fill', d => {
         if (d.group === 0) return isDark ? '#39FF14' : '#2563eb';
@@ -187,7 +175,6 @@ const CitationGraph: React.FC<Props> = ({
       )
       .style('opacity', d => (isVisible(d) ? 1 : 0.08));
 
-    // Update Node Labels
     svg.selectAll<SVGTextElement, PaperNode>('.node-label')
       .style('fill', d =>
         isHighlighted(d.id)
