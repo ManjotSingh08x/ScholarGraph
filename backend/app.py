@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from models import GraphBuilder, OpenAlexService
 from redis_client import redis_client
+import traceback
 import json
 
 app = Flask(__name__)
@@ -42,6 +43,7 @@ def search_papers():
         return jsonify(data), 200
 
     except Exception as e:
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

@@ -6,7 +6,7 @@ import random
 
 BASE = "http://127.0.0.1:5001"
 LOG_DIR = "logs"
-NUM_PAPERS = 20
+NUM_PAPERS = 300
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
