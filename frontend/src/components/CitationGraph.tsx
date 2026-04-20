@@ -5,14 +5,11 @@ import { PaperNode, GraphLink, CitationGraphData } from '../types/types';
 interface Props {
   data: CitationGraphData;
   onNodeClick: (node: PaperNode) => void;
-  onNodeCtrlClick?: (node: PaperNode) => void;   
+  onNodeCtrlClick?: (node: PaperNode) => void;
   selectedId?: string;
   isDark?: boolean;
-
   visibleNodeIds?: Set<string> | null;
-
   highlightedNodeIds?: Set<string>;
-
   degreeMap?: Record<string, number>;
 }
 
@@ -28,15 +25,28 @@ const CitationGraph: React.FC<Props> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // 1. Store callbacks in a ref. 
+  // This prevents the physics simulation from restarting if the parent passes a new function reference.
+  const callbacks = useRef({ onNodeClick, onNodeCtrlClick });
+  useEffect(() => {
+    callbacks.current = { onNodeClick, onNodeCtrlClick };
+  }, [onNodeClick, onNodeCtrlClick]);
+
+  // ==========================================
+  // EFFECT 1: BUILD THE GRAPH (Physics & Zoom)
+  // Runs ONLY when `data` or `degreeMap` changes
+  // ==========================================
   useEffect(() => {
     if (!svgRef.current || !data.nodes.length) return;
 
-    const width  = svgRef.current.clientWidth;
+    const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
-    const svg    = d3.select(svgRef.current);
+    const svg = d3.select(svgRef.current);
+    
+    // Clear out the SVG ONLY when new data arrives
     svg.selectAll('*').remove();
 
-    const container = svg.append('g');
+    const container = svg.append('g').attr('class', 'graph-container');
 
     svg.call(
       d3.zoom<SVGSVGElement, unknown>()
@@ -48,27 +58,14 @@ const CitationGraph: React.FC<Props> = ({
 
     const glow = defs.append('filter').attr('id', 'glow')
       .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
-    glow.append('feGaussianBlur').attr('stdDeviation', isDark ? '5' : '3').attr('result', 'blur');
+    // We add a class to feGaussianBlur to dynamically update its deviation later based on isDark
+    glow.append('feGaussianBlur').attr('class', 'glow-blur').attr('stdDeviation', '4').attr('result', 'blur');
     glow.append('feComposite').attr('in', 'SourceGraphic').attr('in2', 'blur').attr('operator', 'over');
 
     const hlGlow = defs.append('filter').attr('id', 'hl-glow')
       .attr('x', '-60%').attr('y', '-60%').attr('width', '220%').attr('height', '220%');
     hlGlow.append('feGaussianBlur').attr('stdDeviation', '8').attr('result', 'blur');
     hlGlow.append('feComposite').attr('in', 'SourceGraphic').attr('in2', 'blur').attr('operator', 'over');
-
-    const nodeId = (n: PaperNode | string) =>
-      typeof n === 'object' ? n.id : n;
-
-    const isVisible = (d: PaperNode) =>
-      visibleNodeIds === null || visibleNodeIds === undefined || visibleNodeIds.has(d.id);
-
-    const isHighlighted = (id: string) => highlightedNodeIds.has(id);
-
-    // D: an edge is "lit" if both endpoints are in the highlighted set
-    const isEdgeLit = (l: GraphLink) =>
-      highlightedNodeIds.size >= 2 &&
-      highlightedNodeIds.has(nodeId(l.source)) &&
-      highlightedNodeIds.has(nodeId(l.target));
 
     const simulation = d3.forceSimulation<PaperNode>(data.nodes)
       .force('link', d3.forceLink<PaperNode, GraphLink>(data.links).id(d => d.id).distance(150))
@@ -77,16 +74,11 @@ const CitationGraph: React.FC<Props> = ({
       .force('collision', d3.forceCollide().radius(65));
 
     const linkSel = container.append('g')
+      .attr('class', 'links')
       .selectAll<SVGLineElement, GraphLink>('line')
       .data(data.links)
       .join('line')
-      .attr('stroke', l =>
-        isEdgeLit(l)
-          ? (isDark ? '#fff' : '#f59e0b')       
-          : (isDark ? '#39FF14' : '#2563eb')
-      )
-      .attr('stroke-opacity', l => isEdgeLit(l) ? 0.95 : (isDark ? 0.15 : 0.25))
-      .attr('stroke-width',   l => isEdgeLit(l) ? 3 : 1.5);
+      .attr('class', 'graph-link'); // Added class for easy selection later
 
     const drag = d3.drag<SVGGElement, PaperNode>()
       .on('start', (event, d) => {
@@ -100,63 +92,41 @@ const CitationGraph: React.FC<Props> = ({
       });
 
     const nodeGroup = container.append('g')
+      .attr('class', 'nodes')
       .selectAll<SVGGElement, PaperNode>('g')
       .data(data.nodes)
       .join('g')
+      .attr('class', 'node-group')
       .attr('cursor', 'pointer')
       .on('click', (event, d) => {
         if (event.ctrlKey || event.metaKey) {
-          onNodeCtrlClick?.(d);
+          callbacks.current.onNodeCtrlClick?.(d);
         } else {
-          onNodeClick(d);
+          callbacks.current.onNodeClick(d);
         }
       })
       .call(drag as any);
 
-    // Base radius: seed = 24, L1 = 16, L2 = 12; boost slightly by degree
     const baseRadius = (d: PaperNode) => {
       const base = d.group === 0 ? 24 : d.group === 1 ? 16 : 12;
-      const deg  = degreeMap[d.id] ?? 0;
-      return base + Math.min(deg * 0.4, 6);   // up to +6px for highly connected
+      const deg = degreeMap[d.id] ?? 0;
+      return base + Math.min(deg * 0.4, 6);
     };
 
-    // Node circle
     nodeGroup.append('circle')
+      .attr('class', 'node-circle') // Added class
       .attr('r', baseRadius)
-      .attr('fill', d => {
-        if (d.group === 0)            return isDark ? '#39FF14' : '#2563eb';
-        if (isHighlighted(d.id))      return isDark ? '#fff'    : '#f59e0b';
-        return isDark ? '#000' : '#fff';
-      })
-      .attr('stroke', d => {
-        if (d.id === selectedId)   return isDark ? '#fff'    : '#2563eb';
-        if (isHighlighted(d.id))   return isDark ? '#fff'    : '#f59e0b';
-        return isDark ? '#39FF14' : '#e2e8f0';
-      })
-      .attr('stroke-width', d =>
-        d.id === selectedId || isHighlighted(d.id) ? 4 : 2
-      )
-      .style('filter', d =>
-        d.group === 0 ? 'url(#glow)' : isHighlighted(d.id) ? 'url(#hl-glow)' : 'none'
-      )
-      .style('opacity', d => isVisible(d) ? 1 : 0.08)
       .style('transition', 'opacity 0.3s ease-in-out, r 0.3s ease-in-out');
 
-    // Label
     nodeGroup.append('text')
+      .attr('class', 'node-label') // Added class
       .text(d => d.title.length > 25 ? d.title.substring(0, 22) + '…' : d.title)
       .attr('dy', d => baseRadius(d) + 18)
       .attr('text-anchor', 'middle')
       .style('font-size', '10px')
       .style('font-weight', '900')
-      .style('fill', d =>
-        isHighlighted(d.id)
-          ? (isDark ? '#fff' : '#f59e0b')
-          : (isDark ? '#39FF14' : '#1e293b')
-      )
       .style('pointer-events', 'none')
       .style('text-transform', 'uppercase')
-      .style('opacity', d => isVisible(d) ? 1 : 0)
       .style('transition', 'opacity 0.3s ease-in-out');
 
     simulation.on('tick', () => {
@@ -169,7 +139,64 @@ const CitationGraph: React.FC<Props> = ({
     });
 
     return () => { simulation.stop(); };
-  }, [data, onNodeClick, onNodeCtrlClick, selectedId, isDark, visibleNodeIds, highlightedNodeIds, degreeMap]);
+  }, [data, degreeMap]); // Removed visual state dependencies!
+
+  // ==========================================
+  // EFFECT 2: UPDATE STYLES (Colors & Highlights)
+  // Runs ONLY when visual state changes
+  // ==========================================
+  useEffect(() => {
+    if (!svgRef.current) return;
+    const svg = d3.select(svgRef.current);
+
+    const nodeId = (n: PaperNode | string) => (typeof n === 'object' ? n.id : n);
+    const isVisible = (d: PaperNode) =>
+      visibleNodeIds === null || visibleNodeIds === undefined || visibleNodeIds.has(d.id);
+    const isHighlighted = (id: string) => highlightedNodeIds.has(id);
+    const isEdgeLit = (l: GraphLink) =>
+      highlightedNodeIds.size >= 2 &&
+      highlightedNodeIds.has(nodeId(l.source)) &&
+      highlightedNodeIds.has(nodeId(l.target));
+
+    // Update glow dynamic parameter
+    svg.select('.glow-blur').attr('stdDeviation', isDark ? '5' : '3');
+
+    // Update Links
+    svg.selectAll<SVGLineElement, GraphLink>('.graph-link')
+      .attr('stroke', l =>
+        isEdgeLit(l) ? (isDark ? '#fff' : '#f59e0b') : (isDark ? '#39FF14' : '#2563eb')
+      )
+      .attr('stroke-opacity', l => (isEdgeLit(l) ? 0.95 : isDark ? 0.15 : 0.25))
+      .attr('stroke-width', l => (isEdgeLit(l) ? 3 : 1.5));
+
+    // Update Node Circles
+    svg.selectAll<SVGCircleElement, PaperNode>('.node-circle')
+      .attr('fill', d => {
+        if (d.group === 0) return isDark ? '#39FF14' : '#2563eb';
+        if (isHighlighted(d.id)) return isDark ? '#fff' : '#f59e0b';
+        return isDark ? '#000' : '#fff';
+      })
+      .attr('stroke', d => {
+        if (d.id === selectedId) return isDark ? '#fff' : '#2563eb';
+        if (isHighlighted(d.id)) return isDark ? '#fff' : '#f59e0b';
+        return isDark ? '#39FF14' : '#e2e8f0';
+      })
+      .attr('stroke-width', d => (d.id === selectedId || isHighlighted(d.id) ? 4 : 2))
+      .style('filter', d =>
+        d.group === 0 ? 'url(#glow)' : isHighlighted(d.id) ? 'url(#hl-glow)' : 'none'
+      )
+      .style('opacity', d => (isVisible(d) ? 1 : 0.08));
+
+    // Update Node Labels
+    svg.selectAll<SVGTextElement, PaperNode>('.node-label')
+      .style('fill', d =>
+        isHighlighted(d.id)
+          ? isDark ? '#fff' : '#f59e0b'
+          : isDark ? '#39FF14' : '#1e293b'
+      )
+      .style('opacity', d => (isVisible(d) ? 1 : 0));
+
+  }, [selectedId, highlightedNodeIds, visibleNodeIds, isDark]); // Only UI state here
 
   return (
     <div className="w-full h-full">
