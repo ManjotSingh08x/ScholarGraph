@@ -23,7 +23,7 @@ def p95(x):
     return np.percentile(x.dropna(), 95)
 
 
-# ---------------- LINE PLOTS ----------------
+
 def line_plot(df, col, title, outpath):
     cold = df[df["phase"] == "cold"][col].reset_index(drop=True)
     warm = df[df["phase"] == "warm"][col].reset_index(drop=True)
@@ -42,7 +42,6 @@ def line_plot(df, col, title, outpath):
     plt.close(fig)
 
 
-# ---------------- BAR CHARTS ----------------
 def bar_compare(df, cols, title, outpath, use_p95=False):
     phases = ["cold", "warm"]
 
@@ -71,7 +70,6 @@ def bar_compare(df, cols, title, outpath, use_p95=False):
     plt.close(fig)
 
 
-# ---------------- HISTOGRAM ----------------
 def histogram(df, col, title, outpath):
     cold = df[df["phase"] == "cold"][col]
     warm = df[df["phase"] == "warm"][col]
@@ -90,12 +88,10 @@ def histogram(df, col, title, outpath):
     plt.close(fig)
 
 
-# ---------------- MAIN ----------------
 def main():
     coarse = load_csv(COARSE_PATH)
     fine = load_csv(FINE_PATH)
 
-    # ---- COARSE ----
     for col in ["search_time", "paper_time", "graph_time"]:
         line_plot(
             coarse,
@@ -133,7 +129,6 @@ def main():
         os.path.join(OUT_DIR, "coarse_hist_graph.png"),
     )
 
-    # ---- FINE ----
     line_plot(
         fine,
         "graph_time",

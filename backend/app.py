@@ -26,10 +26,10 @@ def search_papers():
         cache_key = f"search:{query}:{page}:{start_year}:{end_year}:{venue}"
         cached = redis_client.get(cache_key)
         if cached:
-            print("SEARCH CACHE HIT ⚡")
+            print("SEARCH CACHE HIT ")
             return jsonify(json.loads(cached)), 200
 
-        print("SEARCH CACHE MISS ❌")
+        print("SEARCH CACHE MISS ")
 
         data = service.search_works(
             query=query,

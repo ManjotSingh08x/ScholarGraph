@@ -52,13 +52,13 @@ def run_example(seed_id, xr, xc, yr, yc, x_lim):
         parent_ref_map[p_id] = ref_ids
         all_ref_ids.update(ref_ids)
 
-    # Range of modification: Global batch fetch and dictionary mapping
+    # Range of modification for global batch fetch and dictionary mapping
     all_refs_list = service.get_batched_works(list(all_ref_ids))
     refs_dict = {work.get("id").split("/")[-1]: work for work in all_refs_list}
     def fetch_parent_citations(parent_id, parent_title):
         cites = service.get_citations(parent_id, max_results=yc)
         return parent_id, parent_title, cites
-    # Range of modification: Parent enumeration and L2 mapping
+    # Range of modification for parent enumeration and L2 mapping
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         future_to_parent = {
             executor.submit(fetch_parent_citations, p.get("id").split("/")[-1], p.get("title")): p 

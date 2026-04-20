@@ -47,7 +47,7 @@ def p95(arr):
     return arr[int(0.95 * len(arr))]
 
 
-# ---------------- COARSE ----------------
+
 def benchmark_coarse():
     papers = get_papers()
     results = []
@@ -82,7 +82,7 @@ def benchmark_coarse():
     summarize(results, ["search_time", "paper_time", "graph_time", "external_calls"])
 
 
-# ---------------- FINE ----------------
+
 def benchmark_fine():
     papers = get_papers()
     results = []
@@ -113,7 +113,7 @@ def benchmark_fine():
     summarize(results, ["graph_time", "external_calls"])
 
 
-# ---------------- CSV ----------------
+
 def save(results, path):
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=results[0].keys())
@@ -121,7 +121,7 @@ def save(results, path):
         writer.writerows(results)
 
 
-# ---------------- SUMMARY ----------------
+
 def summarize(results, keys):
     print("\n--- SUMMARY ---")
 
@@ -141,8 +141,6 @@ def summarize(results, keys):
         else:
             print(f"reduction: {cold_avg / warm_avg:.2f}x")
 
-
-# ---------------- MAIN ----------------
 if __name__ == "__main__":
     benchmark_coarse()
     benchmark_fine()

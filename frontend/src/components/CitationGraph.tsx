@@ -5,14 +5,14 @@ import { PaperNode, GraphLink, CitationGraphData } from '../types/types';
 interface Props {
   data: CitationGraphData;
   onNodeClick: (node: PaperNode) => void;
-  onNodeCtrlClick?: (node: PaperNode) => void;   // D: ctrl+click for path highlight
+  onNodeCtrlClick?: (node: PaperNode) => void;   
   selectedId?: string;
   isDark?: boolean;
-  // B/C/D: set of IDs that pass post-search filters (null = all pass)
+
   visibleNodeIds?: Set<string> | null;
-  // D: nodes the user explicitly lit up → edges between them get highlighted
+
   highlightedNodeIds?: Set<string>;
-  // D: degree map for node sizing hint
+
   degreeMap?: Record<string, number>;
 }
 
@@ -44,7 +44,6 @@ const CitationGraph: React.FC<Props> = ({
         .on('zoom', e => container.attr('transform', e.transform))
     );
 
-    // ── Defs: glow + highlighted-edge marker ────────────────────────────────
     const defs = svg.append('defs');
 
     const glow = defs.append('filter').attr('id', 'glow')
@@ -57,7 +56,6 @@ const CitationGraph: React.FC<Props> = ({
     hlGlow.append('feGaussianBlur').attr('stdDeviation', '8').attr('result', 'blur');
     hlGlow.append('feComposite').attr('in', 'SourceGraphic').attr('in2', 'blur').attr('operator', 'over');
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
     const nodeId = (n: PaperNode | string) =>
       typeof n === 'object' ? n.id : n;
 
@@ -72,27 +70,24 @@ const CitationGraph: React.FC<Props> = ({
       highlightedNodeIds.has(nodeId(l.source)) &&
       highlightedNodeIds.has(nodeId(l.target));
 
-    // ── Simulation ───────────────────────────────────────────────────────────
     const simulation = d3.forceSimulation<PaperNode>(data.nodes)
       .force('link', d3.forceLink<PaperNode, GraphLink>(data.links).id(d => d.id).distance(150))
       .force('charge', d3.forceManyBody().strength(-700))
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide().radius(65));
 
-    // ── Links ────────────────────────────────────────────────────────────────
     const linkSel = container.append('g')
       .selectAll<SVGLineElement, GraphLink>('line')
       .data(data.links)
       .join('line')
       .attr('stroke', l =>
         isEdgeLit(l)
-          ? (isDark ? '#fff' : '#f59e0b')       // amber / white for lit edges
+          ? (isDark ? '#fff' : '#f59e0b')       
           : (isDark ? '#39FF14' : '#2563eb')
       )
       .attr('stroke-opacity', l => isEdgeLit(l) ? 0.95 : (isDark ? 0.15 : 0.25))
       .attr('stroke-width',   l => isEdgeLit(l) ? 3 : 1.5);
 
-    // ── Drag ─────────────────────────────────────────────────────────────────
     const drag = d3.drag<SVGGElement, PaperNode>()
       .on('start', (event, d) => {
         if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -104,7 +99,6 @@ const CitationGraph: React.FC<Props> = ({
         d.fx = null; d.fy = null;
       });
 
-    // ── Nodes ────────────────────────────────────────────────────────────────
     const nodeGroup = container.append('g')
       .selectAll<SVGGElement, PaperNode>('g')
       .data(data.nodes)
@@ -145,7 +139,6 @@ const CitationGraph: React.FC<Props> = ({
       .style('filter', d =>
         d.group === 0 ? 'url(#glow)' : isHighlighted(d.id) ? 'url(#hl-glow)' : 'none'
       )
-      // B/C/D: dim nodes that don't pass post-search filters
       .style('opacity', d => isVisible(d) ? 1 : 0.08)
       .style('transition', 'opacity 0.3s ease-in-out, r 0.3s ease-in-out');
 
@@ -166,7 +159,6 @@ const CitationGraph: React.FC<Props> = ({
       .style('opacity', d => isVisible(d) ? 1 : 0)
       .style('transition', 'opacity 0.3s ease-in-out');
 
-    // ── Tick ─────────────────────────────────────────────────────────────────
     simulation.on('tick', () => {
       linkSel
         .attr('x1', d => (d.source as any).x)

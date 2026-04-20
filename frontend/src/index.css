@@ -5,10 +5,9 @@
   --color-scholarBlue: #2563eb;
 }
 
-/* This is the line that makes the 'dark' button work in v4 */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Global Base Styles */
+
 @layer base {
   body {
     margin: 0;
